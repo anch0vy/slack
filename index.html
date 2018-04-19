@@ -1,0 +1,145 @@
+<html>
+    <head>
+        <script type="text/javascript" src="https://cdn.rawgit.com/ricmoo/aes-js/e27b99df/index.js"></script>
+        <script type="text/javascript" src="js/sql.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.3.1/semantic.min.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.3.1/semantic.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+        <script src="https://unpkg.com/lodash@4.13.1/lodash.min.js"></script>
+
+        <style>
+        #drop_zone {
+            border: 5px solid blue;
+            width:  200px;
+            height: 100px;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <table class="ui striped table">
+                <thead>
+                    <tr>
+                        <th><input style="width: 100px;" v-model="date" placeholder="Date"></th>
+                        <th><input style="width: 130px;" v-model="channel" placeholder="Channel"></th>
+                        <th><input style="width: 70px;" v-model="user" placeholder="User"></th>
+                        <th><input style="width: 100%;" v-model="text" placeholder="Text"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="chat in chats">
+                        <td>{{ chat[1].slice(2,16) }}</td>
+                        <td>{{ chat[4] }}</td>
+                        <td>{{ chat[3] }}</td>
+                        <td><pre>{{ chat[2] }}</pre></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="ui modal" id="start">
+            <div class="header">시작하기</div>
+            <div class="image content">
+                <div class="description">
+                    <p>1. 암호화된 채팅 <a href="https://www.dropbox.com/s/90znxcbcaqznsn6/chat.db.enc?dl=1">db파일</a>을 받는다</p>
+                    <p>2. 미리 공유된 암호화 키 및 iv키를 입력한다.</p>
+                    <p><input placeholder="key" onchange="keyinput(event)"> <input placeholder="iv" onchange="ivinput(event)"></p>
+                    <p>3. 미리 공유된 암호화 키 및 iv키를 입력했으면 아래 버튼을 누른다.</p>
+                    <p><button class="tiny ui button">여기!</button></p>
+                    <p>4. 받은 파일을 여기에 올린다.</p>
+                    <p><input type="file" id="input" onchange="handleFiles(this.files[0])"></p>
+                </div>
+            </div>
+        </div>
+        <script>
+            var db;
+            var key;
+            var iv;
+            var chats;
+            var allChat;
+
+            var app = new Vue({
+                el: '#app',
+                data: {
+                    chats: [],
+                    date: "",
+                    channel: "",
+                    text: "",
+                    user: "",
+                },
+                watch: {
+                    date: function(newDate){
+                        this.getChats()
+                    },
+                    user: function(newDate){
+                        this.getChats()
+                    },
+                    text: function(newDate){
+                        this.getChats()
+                    },
+                    channel: function(newDate){
+                        this.getChats()
+                    },
+                },
+
+                methods:{
+                    getChats: _.debounce(
+                        function(){
+                            console.log(`select * from chat where 
+                            date like "%${this.date}%" and
+                            channel like "%${this.channel}%" and
+                            user like "%${this.user}%" and
+                            text like "%${this.text}%"
+                            order by date;`)
+                            if(this.date == '' && this.channel == '' && this.user == '' && this.text == ''){
+                                this.chats = allChat;
+                                return
+                            }
+                            this.chats = db.exec(`select * from chat where 
+                            date like "%${this.date}%" and
+                            channel like "%${this.channel}%" and
+                            user like "%${this.user}%" and
+                            text like "%${this.text}%"
+                            order by date;`)[0].values;
+                        }, 500
+                    )
+                }
+            })
+
+            function keyinput(event){
+                var enc = new TextEncoder();
+                key = enc.encode(event.target.value);
+            }
+
+            function ivinput(event){
+                var enc = new TextEncoder();
+                iv = enc.encode(event.target.value);
+            }
+
+            function handleFiles(file){
+                var fileReader = new FileReader();
+                fileReader.onload = function() {
+                    var arrayBuffer = this.result;
+                    var aesCBC = new aesjs.ModeOfOperation.cbc(key, iv);
+                    console.log(arrayBuffer)
+                    var rawSqliteData = aesCBC.decrypt(new Uint8Array(arrayBuffer))
+                    db = new SQL.Database(rawSqliteData)
+                    try{
+                        allChat = db.exec("select * from chat order by date;")[0].values
+                        app.chats = allChat;
+                        $('#start').modal('hide');
+                    }catch(e){
+                        alert("wrong key or iv");
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+
+            }
+            $('#start').modal('show');
+
+
+        </script>
+
+    </body>
+</html>
